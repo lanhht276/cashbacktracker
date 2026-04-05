@@ -3,12 +3,27 @@ const cors = require("cors");
 const coopmartScraper = require("./scrapers/coopmartScraper");
 const emartScraper = require("./scrapers/emartScraper");
 const bigcScraper = require("./scrapers/bigcScraper");
+const { searchMock } = require("./scrapers/mockData");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const USE_MOCK = process.env.USE_MOCK === "true";
 
 app.use(cors());
 app.use(express.json());
+
+// Wrapper: use mock data or real scrapers
+function searchProduct(store, keyword) {
+  if (USE_MOCK) {
+    return Promise.resolve(searchMock(store, keyword));
+  }
+  switch (store) {
+    case "Co.op Mart": return coopmartScraper.searchProduct(keyword);
+    case "Emart": return emartScraper.searchProduct(keyword);
+    case "Big C": return bigcScraper.searchProduct(keyword);
+    default: return Promise.resolve([]);
+  }
+}
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -25,15 +40,15 @@ app.get("/api/search", async (req, res) => {
 
   try {
     const [coopResults, emartResults, bigcResults] = await Promise.allSettled([
-      coopmartScraper.searchProduct(keyword),
-      emartScraper.searchProduct(keyword),
-      bigcScraper.searchProduct(keyword),
+      searchProduct("Co.op Mart", keyword),
+      searchProduct("Emart", keyword),
+      searchProduct("Big C", keyword),
     ]);
 
     res.json({
       keyword,
       results: {
-        coopmmart: coopResults.status === "fulfilled" ? coopResults.value : [],
+        coopmart: coopResults.status === "fulfilled" ? coopResults.value : [],
         emart: emartResults.status === "fulfilled" ? emartResults.value : [],
         bigc: bigcResults.status === "fulfilled" ? bigcResults.value : [],
       },
@@ -57,9 +72,9 @@ app.post("/api/compare", async (req, res) => {
       items.map(async (item) => {
         const [coopResults, emartResults, bigcResults] =
           await Promise.allSettled([
-            coopmartScraper.searchProduct(item),
-            emartScraper.searchProduct(item),
-            bigcScraper.searchProduct(item),
+            searchProduct("Co.op Mart", item),
+            searchProduct("Emart", item),
+            searchProduct("Big C", item),
           ]);
 
         const coopBest = getBestProduct(
@@ -168,8 +183,11 @@ function calculateTotals(comparisons) {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Mode: ${USE_MOCK ? "MOCK DATA" : "LIVE SCRAPING"}`);
   console.log("Endpoints:");
   console.log("  GET  /api/health   - Health check");
   console.log("  GET  /api/search   - Search single product");
   console.log("  POST /api/compare  - Compare multiple products");
 });
+
+module.exports = app;
