@@ -11,6 +11,7 @@ const USE_MOCK = process.env.USE_MOCK === "true";
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static("public"));
 
 // Wrapper: use mock data or real scrapers
 function searchProduct(store, keyword) {
